@@ -105,3 +105,62 @@ clipboard handler definitions, using a minimal DOM harness and a harmless shell
 function. Browser startup/visual acceptance and runtime exploitation against the
 installed app were not performed. CodeRabbit findings remain open remotely;
 local tests do not establish hosted clearance or merge readiness.
+
+## PR 35 review follow-up
+
+CodeRabbit's review of `12b5dbb45625f9f92421a2f30f8dba41489d4ed6`
+identified two confirmed functional edge cases:
+
+- [Empty fenced field](https://github.com/jscraik/skillsproof/pull/35#discussion_r4381745527):
+  a longer closing fence left literal backticks and passed the populated-value
+  check. The normaliser now removes both complete fence runs, requiring the
+  closer to be at least as long as the opener. Independent review caught the
+  related four-backtick opener case; it is repaired too. Tests exercise empty
+  three-, four- and five-backtick fences through `validate_body`, substantive
+  content and an incomplete shorter closer.
+- [Unfinished log quote](https://github.com/jscraik/skillsproof/pull/35#discussion_r4381745535):
+  an unfinished log quote hid successful JSON on the next line. Compiling the
+  original and repaired production getter with the same input returned `nil`
+  before and `success` after. CR/LF resets quote and escape state only outside
+  JSON candidates. Core tests cover LF, CRLF, CR and trailing escapes; a
+  production `PipelineEvidenceLoader.stageReceipts()` regression confirms that
+  the successful identity result is accepted. Malformed candidate strings still
+  cannot promote a nested JSON fragment.
+
+Validation on the follow-up candidate:
+
+- `PYTHONDONTWRITEBYTECODE=1 python3 script/test_security_regressions.py` -> fail
+  before repair (long-closing-fence cases); pass after repair, three tests.
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s script -p 'test_*template.py'`
+  -> pass, 17 tests.
+- `PYTHONDONTWRITEBYTECODE=1 python3 script/test_json_security.py` -> pass,
+  original hostile-input deadlines remain satisfied.
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer CLANG_MODULE_CACHE_PATH=/private/tmp/skillsproof-security-clang XDG_CACHE_HOME=/private/tmp/skillsproof-security-xdg swift test --build-system native --disable-sandbox --build-path /private/tmp/skillsproof-security-pr-build --filter CommandJSONTests`
+  -> blocked: sandboxed discovery stalled before tests; stopped that exact
+  driver/helper and ran the full suite with host access.
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer CLANG_MODULE_CACHE_PATH=/private/tmp/skillsproof-security-clang XDG_CACHE_HOME=/private/tmp/skillsproof-security-xdg swift test --build-system native --disable-sandbox --build-path /private/tmp/skillsproof-security-pr-build`
+  -> pass, 127 tests, two skips, zero failures, including core and production
+  loader regressions. No live SDK/Tessl call or installed-app relaunch.
+- `node script/test_prototype_commands.cjs` -> pass in independent review,
+  four shell round trips; quoting code unchanged.
+- `git diff --check` -> pass.
+
+Independent reviewer `/root/security_review` rechecked the follow-up and its
+opening-fence repair: no remaining actionable findings. Reviewed hashes:
+
+```text
+3df37c14088ce4616a1ff97ccf0917c06076ed6fc466fa4982e39fe581126175  Sources/SkillsBarCore/Shell.swift
+7e0e5c596f61dc5ab040b2534da5ab626ad92f7c48bbe1973d33ebc71297cff1  Tests/SkillsBarCoreTests/CommandJSONTests.swift
+d8f616b75db95c22b7f6afad0fc525ba45d0a344455e96addb912cc22f27191b  Tests/SkillsBarTests/PipelineEvidenceLoaderTests.swift
+70909c8dffc43d9db4a7b64c5b5d13f091337c1c695c09e3857701b61bb90925  script/validate_pr_template.py
+f7f7c366387453eec7be26b520f5c58251e2cbcbaa01700172640cd8acb31d8d  script/test_security_regressions.py
+```
+
+Other tool annotations were assessed: subprocess arguments in the regression
+scripts come only from fixed test cases and private temporary paths, use argument
+arrays and never a shell; no incoming request reaches them. Swift compilation
+uses the developer's configured compiler, consistent with the repository's build
+contract. These generic injection annotations are not confirmed vulnerabilities.
+The docstring coverage warning is advisory; it does not identify a correctness
+defect. Hosted final review, thread reconciliation and readiness remain separate
+from this local review record.

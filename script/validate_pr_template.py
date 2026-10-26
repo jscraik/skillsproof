@@ -171,11 +171,14 @@ def normalize(value: str) -> str:
 
     value = strip_comments(value).strip()
     if len(value) >= 6 and value.startswith("```") and value.endswith("```"):
-        content = value[3:-3]
-        start = 0
-        while start < len(content) and (content[start].isalnum() or content[start] in "_-"):
-            start += 1
-        value = content[start:].strip()
+        opening_length = len(value) - len(value.lstrip("`"))
+        closing_length = len(value) - len(value.rstrip("`"))
+        if closing_length >= opening_length:
+            content = value[opening_length:-closing_length]
+            start = 0
+            while start < len(content) and (content[start].isalnum() or content[start] in "_-"):
+                start += 1
+            value = content[start:].strip()
     inline = re.fullmatch(r"`([^`]+)`", value)
     if inline:
         value = inline.group(1)

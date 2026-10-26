@@ -5,7 +5,8 @@ import sys
 import unittest
 from pathlib import Path
 
-from validate_pr_template import normalize, strip_comments
+from validate_pr_template import normalize, strip_comments, validate_body
+from test_validate_pr_template import VALID_BODY
 
 
 class ParserSecurityTests(unittest.TestCase):
@@ -29,6 +30,20 @@ class ParserSecurityTests(unittest.TestCase):
         self.assertEqual(normalize('```\n```'), '')
         self.assertEqual(normalize('` hello `'), 'hello')
         self.assertEqual(normalize('```python\nunfinished'), '```python unfinished')
+
+    def test_longer_closing_fence_cannot_populate_required_field(self):
+        """Reject empty fenced values even when the closing fence is longer."""
+        for fence in ('```\n````', '```python\n`````', '````\n````', '`````python\n``````'):
+            with self.subTest(fence=fence):
+                self.assertEqual(normalize(fence), '')
+                body = VALID_BODY.replace(
+                    '- Problem: Maintainers need a consistent, evidence-led PR body.',
+                    '- Problem: ' + fence,
+                )
+                self.assertTrue(validate_body(body))
+        self.assertEqual(normalize('```python\n substantive evidence \n````'), 'substantive evidence')
+        self.assertEqual(normalize('````python\n substantive evidence \n`````'), 'substantive evidence')
+        self.assertEqual(normalize('````python\nunfinished\n```'), '````python unfinished ```')
 
 
 if __name__ == '__main__':

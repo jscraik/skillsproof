@@ -19,4 +19,14 @@ final class CommandJSONTests: XCTestCase {
         XCTAssertNil(parse(#"log {invalid: {"answer":42}} trailing"#))
         XCTAssertEqual(parse(#"log {"text":"brace } and quote \" and slash \\","answer":42}"#)?.int(at: ["answer"]), 42)
     }
+
+    func testUnfinishedLogQuotesDoNotHideLaterJSON() {
+        for separator in ["\n", "\r\n", "\r"] {
+            for suffix in ["", "\\"] {
+                let output = "warning \"unfinished" + suffix + separator + "{\"status\":\"success\"}"
+                XCTAssertEqual(parse(output)?.string(at: ["status"]), "success")
+            }
+        }
+        XCTAssertNil(parse("log {\"text\":\"unfinished\n{\"status\":\"success\"}"))
+    }
 }

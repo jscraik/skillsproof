@@ -26,6 +26,12 @@ public struct CommandResult: Sendable {
         var escaped = false
         for index in data.indices {
             let byte = data[index]
+            // Log quotes cannot span lines; JSON candidate state must.
+            if depth == 0, byte == 0x0A || byte == 0x0D {
+                inString = false
+                escaped = false
+                continue
+            }
             if inString {
                 if escaped { escaped = false }
                 else if byte == 0x5C { escaped = true }
