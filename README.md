@@ -1,5 +1,7 @@
 # SkillsProof
 
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/jscraik/skillsproof?utm_source=oss&utm_medium=github&utm_campaign=jscraik%2Fskillsproof&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
 Every step. Every fault. One glance.
 
 Previously SkillsBar. Internal Swift module names, bundle identity, environment variables and evidence schemas retain their existing identifiers.
