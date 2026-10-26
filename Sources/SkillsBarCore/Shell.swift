@@ -14,45 +14,46 @@ public struct CommandResult: Sendable {
     public var combinedOutput: String { stdout + "\n" + stderr }
     public var shortFailure: String { String((stderr.isEmpty ? stdout : stderr).prefix(110)).replacingOccurrences(of: "\n", with: " ") }
     public var json: JSONNode? {
-        for candidate in jsonCandidates(from: stdout) {
-            guard let data = candidate.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data) else { continue }
+        let data = Data(stdout.utf8)
+        if let object = try? JSONSerialization.jsonObject(with: data) {
             return JSONNode(object)
         }
-        return nil
-    }
-
-    private func jsonCandidates(from text: String) -> [String] {
-        var candidates = [text]
-        let scalars = Array(text)
-        for start in scalars.indices where scalars[start] == "{" {
-            var depth = 0
-            var inString = false
-            var escaped = false
-            for index in start..<scalars.endIndex {
-                let char = scalars[index]
-                if escaped {
-                    escaped = false
-                    continue
-                }
-                if char == "\\" {
-                    escaped = true
-                    continue
-                }
-                if char == "\"" {
-                    inString.toggle()
-                    continue
-                }
-                guard !inString else { continue }
-                if char == "{" { depth += 1 }
-                if char == "}" { depth -= 1 }
-                if depth == 0 {
-                    candidates.append(String(scalars[start...index]))
-                    break
+        // Scan disjoint outer objects once. Never retry nested suffixes or
+        // retain candidate copies; quoted braces are data, including in logs.
+        var start: Data.Index?
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for index in data.indices {
+            let byte = data[index]
+            // Log quotes cannot span lines; JSON candidate state must.
+            if depth == 0, byte == 0x0A || byte == 0x0D {
+                inString = false
+                escaped = false
+                continue
+            }
+            if inString {
+                if escaped { escaped = false }
+                else if byte == 0x5C { escaped = true }
+                else if byte == 0x22 { inString = false }
+                continue
+            }
+            if byte == 0x22 { inString = true; continue }
+            if byte == 0x7B {
+                if depth == 0 { start = index }
+                depth += 1
+            } else if byte == 0x7D, depth > 0 {
+                depth -= 1
+                if depth == 0, let candidateStart = start {
+                    let candidate = data.subdata(in: candidateStart..<(index + 1))
+                    if let object = try? JSONSerialization.jsonObject(with: candidate) {
+                        return JSONNode(object)
+                    }
+                    start = nil
                 }
             }
         }
-        return candidates
+        return nil
     }
 }
 
