@@ -201,7 +201,7 @@ private struct PrototypeRegistryCard: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack {
-                if let image = Bundle.module.url(forResource: "TesslWordmark", withExtension: "png").flatMap(NSImage.init(contentsOf:)) {
+                if let image = AppResources.url(forResource: "TesslWordmark", withExtension: "png").flatMap(NSImage.init(contentsOf:)) {
                     Image(nsImage: image).resizable().scaledToFit().frame(width: 247.5, height: 71.1).fixedSize()
                         // Compensate for the banner's empty left margin without resizing its artwork.
                         .offset(x: -36)

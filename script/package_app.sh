@@ -7,7 +7,7 @@ source "$ROOT_DIR/version.env"
 
 APP_NAME="SkillsProof"
 BUNDLE_ID="${SKILLSBAR_BUNDLE_ID:-local.jscraik.skillsbar}"
-BUILD_ROOT="${SKILLSBAR_BUILD_ROOT:-$HOME/.codex/usage-data/skillsbar}"
+BUILD_ROOT="${2:-${SKILLSBAR_BUILD_ROOT:-$HOME/.codex/usage-data/skillsbar}}"
 CONFIGURATION="${1:-debug}"
 ARCHES_VALUE="${ARCHES:-$(uname -m)}"
 SIGNING_MODE="${SKILLSBAR_SIGNING:-adhoc}"
@@ -99,6 +99,9 @@ else
   cp "${BUILT_BINARIES[0]}" "$MACOS_DIR/$APP_NAME"
 fi
 chmod +x "$MACOS_DIR/$APP_NAME"
+if [[ "$CONFIGURATION" == "release" ]]; then
+  /usr/bin/strip -S -x "$MACOS_DIR/$APP_NAME"
+fi
 
 actual_arches="$(/usr/bin/lipo -archs "$MACOS_DIR/$APP_NAME")"
 for arch in "${ARCH_LIST[@]}"; do
@@ -142,6 +145,9 @@ else
   /usr/bin/codesign --force --sign - "$STAGE_DIR"
 fi
 /usr/bin/codesign --verify --deep --strict "$STAGE_DIR"
+if [[ "$CONFIGURATION" == "release" ]]; then
+  python3 "$ROOT_DIR/script/check_release.py" "$STAGE_DIR"
+fi
 
 rm -rf "$APP_DIR"
 mv "$STAGE_DIR" "$APP_DIR"

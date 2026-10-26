@@ -163,7 +163,7 @@ private func resourceImage(named name: String) -> NSImage? {
     if let url = Bundle.main.url(forResource: name, withExtension: "png") {
         return NSImage(contentsOf: url)
     }
-    if let url = Bundle.module.url(forResource: name, withExtension: "png") {
+    if let url = AppResources.url(forResource: name, withExtension: "png") {
         return NSImage(contentsOf: url)
     }
     return nil

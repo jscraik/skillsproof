@@ -30,7 +30,9 @@ SkillsProof is a local macOS SwiftUI menu-bar prototype for Skills SDK evidence 
 
 ## Runtime And Data Boundaries
 
-- Default data repo: `/Users/jamiecraik/dev/agent-skills`.
+- Discover installed skills under the current user's home, or locate a source
+  checkout from the working directory. Set `AGENT_SKILLS_ROOT` for an explicit
+  source checkout; never embed a workstation-specific home path.
 - Default selected skill: `Skills/agent-ops/improve-agent-native/SKILL.md`.
 - Override the data repo with `AGENT_SKILLS_ROOT`.
 - Override the selected skill with `AGENT_SKILL_PATH` or `SELECTED_SKILL_PATH`.

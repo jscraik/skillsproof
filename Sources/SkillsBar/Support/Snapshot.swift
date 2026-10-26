@@ -4,11 +4,15 @@ import SwiftUI
 
 enum SnapshotRequest {
     static var outputPath: String? {
+        #if DEBUG
         let args = CommandLine.arguments
         guard let index = args.firstIndex(of: "--snapshot"), args.indices.contains(index + 1) else {
             return nil
         }
         return args[index + 1]
+        #else
+        return nil
+        #endif
     }
 
     static func configuration(arguments: [String] = CommandLine.arguments) -> SnapshotConfiguration {

@@ -12,7 +12,7 @@ final class SkillContractTests: XCTestCase {
             encoding: .utf8
         )
         let mainLookup = try XCTUnwrap(dashboardView.range(of: "Bundle.main.url(forResource:"))
-        let moduleLookup = try XCTUnwrap(dashboardView.range(of: "Bundle.module.url(forResource:"))
+        let moduleLookup = try XCTUnwrap(dashboardView.range(of: "AppResources.url(forResource:"))
 
         XCTAssertLessThan(mainLookup.lowerBound, moduleLookup.lowerBound)
     }

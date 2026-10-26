@@ -11,7 +11,15 @@ struct DashboardLoader {
         let evidence: Value
     }
 
-    static let defaultRepoRoot = URL(fileURLWithPath: "/Users/jamiecraik/dev/agent-skills")
+    static var defaultRepoRoot: URL { resolvedDefaultRepoRoot() }
+
+    static func resolvedDefaultRepoRoot(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        let loader = DashboardLoader(environment: environment, homeDirectory: homeDirectory, storedSkillPath: nil)
+        return (try? loader.findRepoRoot()) ?? homeDirectory
+    }
     static let defaultSkillPath = "Skills/agent-ops/improve-agent-native/SKILL.md"
     static let selectedSkillDefaultsKey = "selectedSkillPath"
     static let packageCommand = "./bin/ask skills package verify Skills/agent-ops/improve-agent-native --json --robot"
@@ -664,10 +672,6 @@ struct DashboardLoader {
             }
             candidate.deleteLastPathComponent()
         }
-        let fallback = URL(fileURLWithPath: "/Users/jamiecraik/dev/agent-skills")
-        if FileManager.default.fileExists(atPath: fallback.appendingPathComponent("Skills/agent-ops/improve-agent-native/SKILL.md").path) {
-            return fallback
-        }
         if !InstalledSkillDiscovery.paths(home: homeDirectory).isEmpty { return homeDirectory }
         throw SkillsBarError.missingRepoRoot
     }
@@ -964,8 +968,8 @@ struct DashboardLoader {
         return signal
     }
 
-    private func tesslFixtureSignal(registryPath: String) -> TesslSignal? {
-        let environment = ProcessInfo.processInfo.environment
+    func tesslFixtureSignal(registryPath: String) -> TesslSignal? {
+        #if DEBUG
         guard environment["TESSL_REGISTRY_FIXTURE"] == "1"
                 || environment["TESSL_REGISTRY_FIXTURE_SCORE"] != nil
                 || environment["TESSL_REGISTRY_FIXTURE_MODE"] != nil else { return nil }
@@ -989,9 +993,12 @@ struct DashboardLoader {
             registryEvalCount: environment["TESSL_REGISTRY_FIXTURE_EVALS"].flatMap(Int.init),
             registryImprovementMultiplier: environment["TESSL_REGISTRY_FIXTURE_MULTIPLIER"].flatMap(Double.init),
             registryVisibility: environment["TESSL_REGISTRY_FIXTURE_VISIBILITY"] ?? "Private",
-            dataOrigin: mode == "cached" ? .cached : .liveCLI,
+            dataOrigin: .fixture,
             recoveryCommand: "tessl install \(registryPath)"
         )
+        #else
+        return nil
+        #endif
     }
 
     private func qualitySignal(from result: CommandResult, root: URL, command rawCommand: String) -> MetricSignal {

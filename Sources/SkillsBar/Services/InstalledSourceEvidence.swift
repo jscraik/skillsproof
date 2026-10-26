@@ -192,7 +192,7 @@ enum InstalledSourceEvidence {
             observation.sourceReview = review
             if let proof = review.validation_proof {
                 guard validValidationProof(proof, review: review, capture: sourceCapture),
-                      let bridge = Bundle.module.url(forResource: "verify_validation_receipts", withExtension: "py") else {
+                      let bridge = AppResources.url(forResource: "verify_validation_receipts", withExtension: "py") else {
                     return result(.stale, "Validation evidence is incomplete or belongs to another candidate; renew the source review", sourceCapture)
                 }
                 let python = URL(fileURLWithPath: link.sdk_executable).deletingLastPathComponent().appendingPathComponent("python")

@@ -1,11 +1,19 @@
 import Foundation
 
 enum SkillsBarDemoMode {
+    #if DEBUG
     static let environmentKey = "SKILLSBAR_DEMO_MODE"
+    #else
+    static let environmentKey = ""
+    #endif
 
     static func isEnabled(in environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        #if DEBUG
         guard let value = environment[environmentKey]?.lowercased() else { return false }
         return ["1", "true", "yes", "on"].contains(value)
+        #else
+        return false
+        #endif
     }
 }
 
@@ -45,12 +53,16 @@ struct DashboardDataSource {
     }
 
     private var fixtureValue: String? {
+        #if DEBUG
         if SkillsBarDemoMode.isEnabled(in: environment) {
             return "live"
         }
         guard let value = environment["SKILLSBAR_REVIEW_FIXTURE"]?.lowercased(),
               ["1", "live", "no-cli", "offline", "reference"].contains(value) else { return nil }
         return value
+        #else
+        return nil
+        #endif
     }
 
     private var fixtureDashboard: SkillDashboard {

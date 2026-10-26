@@ -16,6 +16,9 @@ jobs:
             swift build --build-system native --disable-sandbox 2>&1 | tee artifacts/native/build.log
             swift test --build-system native --disable-sandbox --filter ReviewPopoverTests 2>&1 | tee artifacts/native/rendering-tests.log
             swift test --build-system native --disable-sandbox 2>&1 | tee artifacts/native/tests.log
+            python3 script/test_check_release.py 2>&1 | tee artifacts/native/release-artifact-tests.log
+            swift test -c release --build-system native --disable-sandbox 2>&1 | tee artifacts/native/release-tests.log
+            bash script/package_app.sh release /tmp/skillsproof-circleci-release-safety 2>&1 | tee artifacts/native/release-package.log
             echo "Deterministic fixture; not live SDK or registry evidence" > artifacts/native/snapshot.log
             SKILLSBAR_REVIEW_FIXTURE=live .build/debug/SkillsProof --snapshot-dark --snapshot artifacts/native/fixture.png 2>&1 | tee -a artifacts/native/snapshot.log
           no_output_timeout: 20m
