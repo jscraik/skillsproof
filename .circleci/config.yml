@@ -1,0 +1,91 @@
+version: 2.1
+
+jobs:
+  native:
+    macos:
+      xcode: "26.4.1"
+    resource_class: m4pro.medium
+    steps:
+      - checkout
+      - run:
+          name: Native build, tests and fixture snapshot
+          command: |
+            mkdir -p artifacts/native
+            { git rev-parse HEAD; sw_vers; xcodebuild -version; swift --version; } | tee artifacts/native/environment.log
+            unset SKILLSBAR_LIVE_INTEGRATION SKILLSBAR_REVIEW_FIXTURE
+            swift build --build-system native --disable-sandbox 2>&1 | tee artifacts/native/build.log
+            swift test --build-system native --disable-sandbox --filter ReviewPopoverTests 2>&1 | tee artifacts/native/rendering-tests.log
+            swift test --build-system native --disable-sandbox 2>&1 | tee artifacts/native/tests.log
+            python3 script/test_check_release.py 2>&1 | tee artifacts/native/release-artifact-tests.log
+            swift test -c release --build-system native --disable-sandbox 2>&1 | tee artifacts/native/release-tests.log
+            bash script/package_app.sh release /tmp/skillsproof-circleci-release-safety 2>&1 | tee artifacts/native/release-package.log
+            echo "Deterministic fixture; not live SDK or registry evidence" > artifacts/native/snapshot.log
+            SKILLSBAR_REVIEW_FIXTURE=live .build/debug/SkillsProof --snapshot-dark --snapshot artifacts/native/fixture.png 2>&1 | tee -a artifacts/native/snapshot.log
+          no_output_timeout: 20m
+      - store_artifacts:
+          path: artifacts/native
+  site:
+    docker:
+      - image: cimg/node:22.14.0
+    steps:
+      - checkout
+      - run:
+          name: Demo site validation and browser proof
+          working_directory: ~/project/sites/skillsbar-walkthrough
+          environment:
+            BROWSER_ARTIFACT_DIR: outputs/ci
+          command: |
+            mkdir -p outputs/ci
+            { git rev-parse HEAD; node --version; npm --version; } | tee outputs/ci/environment.log
+            npm ci 2>&1 | tee outputs/ci/install.log
+            npx --no-install playwright-core install --with-deps chrome 2>&1 | tee outputs/ci/browser-install.log
+            npm run lint 2>&1 | tee outputs/ci/lint.log
+            npm test 2>&1 | tee outputs/ci/rendered-tests.log
+            node scripts/test-browser-production.mjs 2>&1 | tee outputs/ci/browser-tests.log
+      - store_artifacts:
+          path: sites/skillsbar-walkthrough/outputs/ci
+  codeql:
+    macos:
+      xcode: "26.4.1"
+    resource_class: m4pro.medium
+    steps:
+      - checkout
+      - run:
+          name: Analyse Swift with pinned CodeQL
+          command: |
+            mkdir -p artifacts/codeql
+            # CodeQL's build tracer requires Rosetta on Apple Silicon.
+            if [[ "$(uname -m)" == "arm64" ]]; then
+              if ! /usr/bin/arch -x86_64 /usr/bin/true; then
+                sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+              fi
+              /usr/bin/arch -x86_64 /usr/bin/true
+            fi
+            curl --fail --location --retry 3 --max-time 600 https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.3/codeql-bundle-osx64.tar.gz -o /tmp/codeql.tar.gz
+            echo "5a035e81cd8c76622d0e453d1d5197cfee46177f171d623f15fbb560a0b2b215  /tmp/codeql.tar.gz" | shasum -a 256 -c -
+            tar -xzf /tmp/codeql.tar.gz -C /tmp
+            /tmp/codeql/codeql database create /tmp/swift-db --language=swift --command="swift build --build-system native --disable-sandbox"
+            /tmp/codeql/codeql database analyze /tmp/swift-db codeql/swift-queries:codeql-suites/swift-code-scanning.qls --format=sarif-latest --output=artifacts/codeql/results.sarif
+          no_output_timeout: 20m
+      - store_artifacts:
+          path: artifacts/codeql
+      - run:
+          name: Upload security results to GitHub
+          command: |
+            : "${CODEQL_GITHUB_TOKEN:?Configure a GitHub token with code scanning upload permission}"
+            if [[ -n "${CIRCLE_PULL_REQUEST:-}" ]]; then
+              pr_number="${CIRCLE_PULL_REQUEST##*/}"
+              [[ "$pr_number" =~ ^[0-9]+$ ]]
+              ref="refs/pull/$pr_number/head"
+            else
+              ref="refs/heads/$CIRCLE_BRANCH"
+            fi
+            printf '%s' "$CODEQL_GITHUB_TOKEN" | /tmp/codeql/codeql github upload-results --github-auth-stdin --repository="$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME" --ref="$ref" --commit="$CIRCLE_SHA1" --sarif=artifacts/codeql/results.sarif
+
+workflows:
+  validation:
+    jobs:
+      - native
+      - site
+      - codeql:
+          context: skillsproof-codeql

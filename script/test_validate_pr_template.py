@@ -164,6 +164,29 @@ class PullRequestTemplateValidatorTests(unittest.TestCase):
                 body = VALID_BODY.replace(command, command.replace("-> pass", f"-> blocked ({reason})"))
                 self.assertTrue(any("Command evidence must use" in error for error in validate_body(body)))
 
+    def test_documented_command_outcomes_are_accepted(self) -> None:
+        """Bind every outcome alternative to the required command-line prefix."""
+        command = "- Command: `python3 script/validate_pr_template.py --template .github/PULL_REQUEST_TEMPLATE.md` -> pass"
+        for outcome in [
+            "pass",
+            "pass (local check).",
+            "fail",
+            "fail (known failure).",
+            "n.a. (not provided by this repository)",
+            "n/a (not applicable)",
+            "blocked (service unavailable)",
+        ]:
+            with self.subTest(outcome=outcome):
+                body = VALID_BODY.replace(command, command.replace("-> pass", f"-> {outcome}"))
+                self.assertEqual(validate_body(body), [])
+
+    def test_outcome_alternatives_do_not_admit_unstructured_lines(self) -> None:
+        """Do not accept missing command identity or unknown outcomes."""
+        command = "- Command: `python3 script/validate_pr_template.py --template .github/PULL_REQUEST_TEMPLATE.md` -> pass"
+        for replacement in ["- Command: -> pass", "- Command: `check` -> success", "- Command: `check` -> blocked"]:
+            with self.subTest(replacement=replacement):
+                self.assertTrue(validate_body(VALID_BODY.replace(command, replacement)))
+
     def test_template_requires_fixed_checklist_items(self) -> None:
         """Reject a template that omits a required checklist item."""
         template = Path(".github/PULL_REQUEST_TEMPLATE.md").read_text(encoding="utf-8")

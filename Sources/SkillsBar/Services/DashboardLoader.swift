@@ -11,7 +11,15 @@ struct DashboardLoader {
         let evidence: Value
     }
 
-    static var defaultRepoRoot: URL { FileManager.default.homeDirectoryForCurrentUser }
+    static var defaultRepoRoot: URL { resolvedDefaultRepoRoot() }
+
+    static func resolvedDefaultRepoRoot(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        let loader = DashboardLoader(environment: environment, homeDirectory: homeDirectory, storedSkillPath: nil)
+        return (try? loader.findRepoRoot()) ?? homeDirectory
+    }
     static let defaultSkillPath = "Skills/agent-ops/improve-agent-native/SKILL.md"
     static let selectedSkillDefaultsKey = "selectedSkillPath"
     static let packageCommand = "./bin/ask skills package verify Skills/agent-ops/improve-agent-native --json --robot"

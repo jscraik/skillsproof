@@ -3,6 +3,13 @@ import XCTest
 @testable import SkillsBar
 
 final class ReleaseSafetyTests: XCTestCase {
+    func testFixtureCommandsUseExplicitSourceCheckout() {
+        let source = URL(fileURLWithPath: "/tmp/portable-source-checkout")
+        let root = DashboardLoader.resolvedDefaultRepoRoot(environment: ["AGENT_SKILLS_ROOT": source.path])
+        XCTAssertEqual(root, source)
+        XCTAssertTrue(DashboardLoader.localEvidenceCommand(root: root).hasPrefix("cd '\(source.path)' && "))
+    }
+
     func testInstalledDiscoveryUsesProvidedHomeWithoutSDKCheckout() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: home) }

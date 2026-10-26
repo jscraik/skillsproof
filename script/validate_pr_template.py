@@ -291,7 +291,7 @@ def command_evidence_errors(body: str) -> list[str]:
         return ["Validation section must include at least one Command evidence line."]
 
     outcome = r"(?:pass|fail|`(?:pass|fail)`)(?:\s*\([^)]*\)\.?)?|(?:n\.a\.|n/a|`(?:n\.a\.|n/a)`)(?:\s*\([^)]*\))?|(?:blocked|`blocked`)\s*\([^)]*\S[^)]*\)"
-    pattern = re.compile(rf"^-\s*Command:\s*(?:`[^\n`]+`|\S.*?\S)\s*->\s*{outcome}$", re.I)
+    pattern = re.compile(rf"^-\s*Command:\s*(?:`[^\n`]+`|\S.*?\S)\s*->\s*(?:{outcome})$", re.I)
     errors = []
     for line in command_lines:
         if not pattern.fullmatch(line):
