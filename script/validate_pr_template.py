@@ -178,7 +178,9 @@ def normalize(value: str) -> str:
             start = 0
             while start < len(content) and (content[start].isalnum() or content[start] in "_-"):
                 start += 1
-            value = content[start:].strip()
+            if content[start:].startswith(("\n", "\r\n")):
+                content = content[start:]
+            value = content.strip()
     inline = re.fullmatch(r"`([^`]+)`", value)
     if inline:
         value = inline.group(1)

@@ -45,6 +45,12 @@ class ParserSecurityTests(unittest.TestCase):
         self.assertEqual(normalize('````python\n substantive evidence \n`````'), 'substantive evidence')
         self.assertEqual(normalize('````python\nunfinished\n```'), '````python unfinished ```')
 
+    def test_single_line_value_in_longer_fences_is_preserved(self):
+        """Keep single-line content instead of treating it as a language marker."""
+        for fence in ('```reason````', '````reason````', '````reason`````'):
+            with self.subTest(fence=fence):
+                self.assertEqual(normalize(fence), 'reason')
+
 
 if __name__ == '__main__':
     unittest.main()
