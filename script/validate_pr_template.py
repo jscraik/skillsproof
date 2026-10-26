@@ -154,16 +154,28 @@ REQUIRED_CHECKLIST_ITEMS = (
 def strip_comments(value: str) -> str:
     """Remove HTML comments before checking whether a value is populated."""
 
-    return re.sub(r"<!--\s*[\s\S]*?\s*-->", "", value)
+    parts = []
+    cursor = 0
+    while (start := value.find("<!--", cursor)) != -1:
+        end = value.find("-->", start + 4)
+        if end == -1:
+            break
+        parts.append(value[cursor:start])
+        cursor = end + 3
+    parts.append(value[cursor:])
+    return "".join(parts)
 
 
 def normalize(value: str) -> str:
     """Remove comments and enclosing code markers, then collapse whitespace."""
 
     value = strip_comments(value).strip()
-    fenced = re.fullmatch(r"```[\w-]*\s*([\s\S]*?)\s*```", value)
-    if fenced:
-        value = fenced.group(1)
+    if len(value) >= 6 and value.startswith("```") and value.endswith("```"):
+        content = value[3:-3]
+        start = 0
+        while start < len(content) and (content[start].isalnum() or content[start] in "_-"):
+            start += 1
+        value = content[start:].strip()
     inline = re.fullmatch(r"`([^`]+)`", value)
     if inline:
         value = inline.group(1)
