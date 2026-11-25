@@ -1,5 +1,11 @@
 # SkillsProof
 
+![SkillsProof demo fixture showing a blocked candidate-identity gate and a separately labelled Tessl baseline](mockups/skillsbar-supported-demo-fixture.png)
+
+*Retained demo-fixture preview. The `DEMO FIXTURE` and `BASELINE` labels identify
+synthetic evidence; this image does not establish current live SDK or registry
+state. Run the demo below to inspect the current app.*
+
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/jscraik/skillsproof?utm_source=oss&utm_medium=github&utm_campaign=jscraik%2Fskillsproof&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 Every step. Every fault. One glance.
@@ -8,13 +14,36 @@ Previously SkillsBar. Internal Swift module names, bundle identity, environment 
 
 SkillsProof is a native macOS menu-bar app for watching local Skills SDK evidence without flattening separate proof lanes. It renders the selected skill's canonical package identity, validation, security, eval preparation, durable downstream receipts, runtime proof, inventory, and Tessl registry state in a compact SwiftUI popover.
 
+The app is currently a local prototype with a release-capable packaging path. It builds and launches from this checkout, reads the agent-skills repository on disk, and keeps local SDK evidence separate from Tessl registry evidence. A public release still requires Jamie's Developer ID certificate and Apple notarization credentials.
+
+## Quick start
+
+Use macOS 14 or newer, Git, and an active Xcode developer toolchain with Swift
+6.0 or newer. The deterministic demo lets you try the interface without a local
+Agent-Skills checkout or Tessl credentials:
+
+```bash
+git clone https://github.com/jscraik/skillsproof.git
+cd skillsproof
+./script/build_and_run.sh --demo
+```
+
+Click the Skills SDK document icon in the macOS menu bar. Expect a popover
+labelled `DEMO FIXTURE`, with Gate 1 awaiting candidate identity and a separate
+registry card labelled `BASELINE`. These are synthetic inputs. The demo does
+not establish live SDK, registry, hosted CI or release readiness.
+
+For your own local evidence, use [`./Launch.command`](#run) and
+[configure the data source](#configure-the-data-source). The optional
+[site-to-native walkthrough](DEMO.md) explains the fixture and its boundaries.
+
+## Interface
+
 The native Guided evidence layout offers a nine-gate overview, searchable skill
 and plugin chooser, and individual gate details with persistent navigation.
 One Tessl results card stays visible alongside those views. Blue indicates
 selection independently of evidence status colours. All displayed native results
 come from the dashboard loaders; the browser prototype remains illustrative.
-
-The app is currently a local prototype with a release-capable packaging path. It builds and launches from this checkout, reads the agent-skills repository on disk, and keeps local SDK evidence separate from Tessl registry evidence. A public release still requires Jamie's Developer ID certificate and Apple notarization credentials.
 
 ## What It Shows
 
@@ -33,7 +62,7 @@ These lanes are intentionally independent. Every downstream receipt must use the
 ## Requirements
 
 - macOS 14 or newer.
-- SwiftPM from Xcode or the active developer toolchain.
+- Swift 6.0 or newer and SwiftPM from Xcode or the active developer toolchain.
 - Installed skills in the home locations below. A local agent-skills checkout is optional for inventory and required for the source SDK evidence route. SkillsProof discovers a checkout from the working directory or uses `AGENT_SKILLS_ROOT` when set; no fixed checkout location is assumed.
 - Optional: `tessl` CLI access for live registry status.
 
@@ -43,8 +72,9 @@ SkillsProof never automatically runs provider-backed `oss-local` or `oss-cloud` 
 
 ## Run
 
+From the root of your cloned `skillsproof` checkout:
+
 ```bash
-cd /Users/jamiecraik/dev/skillsbar
 ./Launch.command
 ```
 
