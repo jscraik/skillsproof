@@ -18,27 +18,223 @@ public struct CommandResult: Sendable {
         if let object = try? JSONSerialization.jsonObject(with: data) {
             return JSONNode(object)
         }
-        // Scan disjoint outer objects once. Never retry nested suffixes or
-        // retain candidate copies; quoted braces are data, including in logs.
+
+        func isWhitespace(_ byte: UInt8) -> Bool {
+            byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
+        }
+
+        // Recovery candidates are scanned once. The first non-whitespace byte
+        // after an opening brace must be a JSON object key or the empty-object
+        // close; other braces are treated as diagnostic text.
+        func recoverObjectStarting(at start: Data.Index) -> (end: Data.Index, node: JSONNode?, validPrefix: Bool) {
+            var depth = 1
+            var arrayDepth = 0
+            var candidateInString = false
+            var candidateEscaped = false
+            var awaitingFirstMember = true
+            var lastSignificantByte: UInt8 = 0x7B
+            var nestedCandidateStart: Data.Index?
+            var lastCompleteNestedNode: JSONNode?
+            var lastCompleteNestedEnd: Data.Index?
+            var index = data.index(after: start)
+            while index < data.endIndex {
+                let byte = data[index]
+                // A quoted log ends at a line boundary. Let the outer scanner
+                // resume on the next line instead of swallowing its JSON.
+                if byte == 0x0A || byte == 0x0D {
+                    let nestedFallback: JSONNode? = lastCompleteNestedNode.flatMap { node -> JSONNode? in
+                        guard let nestedEnd = lastCompleteNestedEnd else { return nil }
+                        var suffix = nestedEnd
+                        while suffix < index {
+                            if !isWhitespace(data[suffix]) { return nil }
+                            suffix = data.index(after: suffix)
+                        }
+                        return node
+                    }
+                    return (index, nestedFallback, true)
+                }
+                if awaitingFirstMember {
+                    if isWhitespace(byte) {
+                        index = data.index(after: index)
+                        continue
+                    }
+                    if byte == 0x22 {
+                        awaitingFirstMember = false
+                        candidateInString = true
+                        index = data.index(after: index)
+                        continue
+                    }
+                    if byte == 0x7D {
+                        let end = data.index(after: index)
+                        let candidate = data.subdata(in: start..<end)
+                        let node = (try? JSONSerialization.jsonObject(with: candidate)).map(JSONNode.init)
+                        return (end, node, true)
+                    }
+                    return (data.index(after: start), nil, false)
+                }
+                if candidateInString {
+                    if candidateEscaped { candidateEscaped = false }
+                    else if byte == 0x5C { candidateEscaped = true }
+                    else if byte == 0x22 {
+                        candidateInString = false
+                        lastSignificantByte = byte
+                    }
+                } else if byte == 0x22 {
+                    guard lastSignificantByte == 0x7B || lastSignificantByte == 0x2C || lastSignificantByte == 0x3A || lastSignificantByte == 0x5B else {
+                        return (data.index(after: index), nil, false)
+                    }
+                    candidateInString = true
+                } else if byte == 0x5B {
+                    arrayDepth += 1
+                    lastSignificantByte = byte
+                } else if byte == 0x5D {
+                    arrayDepth = max(0, arrayDepth - 1)
+                    lastSignificantByte = byte
+                } else if byte == 0x7B {
+                    if depth == 1, arrayDepth == 0 { nestedCandidateStart = index }
+                    depth += 1
+                    lastSignificantByte = byte
+                } else if byte == 0x7D, depth > 0 {
+                    depth -= 1
+                    if depth == 1, let nestedStart = nestedCandidateStart {
+                        let nestedEnd = data.index(after: index)
+                        let nestedCandidate = data.subdata(in: nestedStart..<nestedEnd)
+                        if let object = try? JSONSerialization.jsonObject(with: nestedCandidate) {
+                            lastCompleteNestedNode = JSONNode(object)
+                            lastCompleteNestedEnd = nestedEnd
+                        }
+                        nestedCandidateStart = nil
+                    }
+                    if depth == 0 {
+                        let end = data.index(after: index)
+                        let candidate = data.subdata(in: start..<end)
+                        let node = (try? JSONSerialization.jsonObject(with: candidate)).map(JSONNode.init)
+                        return (end, node, true)
+                    }
+                    lastSignificantByte = byte
+                } else if !isWhitespace(byte) {
+                    lastSignificantByte = byte
+                }
+                index = data.index(after: index)
+            }
+            let nestedFallback: JSONNode? = lastCompleteNestedNode.flatMap { node -> JSONNode? in
+                guard let nestedEnd = lastCompleteNestedEnd else { return nil }
+                var suffix = nestedEnd
+                while suffix < data.endIndex {
+                    if !isWhitespace(data[suffix]) { return nil }
+                    suffix = data.index(after: suffix)
+                }
+                return node
+            }
+            return (data.endIndex, nestedFallback, true)
+        }
+
+        // A malformed brace inside a quoted diagnostic can contain nested
+        // braces. Skip that complete span so its inner objects cannot become
+        // recovery candidates. A quote closes the log text unless it appears
+        // where a JSON key or value string can begin.
+        func skipMalformedQuotedBrace(at start: Data.Index) -> (end: Data.Index, quoteClosed: Bool) {
+            var depth = 1
+            var inNestedString = false
+            var nestedEscaped = false
+            var logEscaped = false
+            var lastSignificantByte: UInt8 = 0x7B
+            var index = data.index(after: start)
+            while index < data.endIndex {
+                let byte = data[index]
+                if byte == 0x0A || byte == 0x0D { return (index, false) }
+                if inNestedString {
+                    if nestedEscaped { nestedEscaped = false }
+                    else if byte == 0x5C { nestedEscaped = true }
+                    else if byte == 0x22 {
+                        inNestedString = false
+                        lastSignificantByte = byte
+                    }
+                    index = data.index(after: index)
+                    continue
+                }
+                if logEscaped {
+                    logEscaped = false
+                    if byte == 0x22 || byte == 0x5C {
+                        lastSignificantByte = byte
+                        index = data.index(after: index)
+                        continue
+                    }
+                }
+                if byte == 0x5C {
+                    logEscaped = true
+                    index = data.index(after: index)
+                    continue
+                }
+                if byte == 0x22 {
+                    if lastSignificantByte == 0x7B || lastSignificantByte == 0x2C || lastSignificantByte == 0x3A || lastSignificantByte == 0x5B {
+                        inNestedString = true
+                        nestedEscaped = false
+                        lastSignificantByte = byte
+                    } else {
+                        return (data.index(after: index), true)
+                    }
+                } else if byte == 0x7B {
+                    depth += 1
+                    lastSignificantByte = byte
+                } else if byte == 0x7D {
+                    depth -= 1
+                    lastSignificantByte = byte
+                    if depth == 0 { return (data.index(after: index), false) }
+                } else if !isWhitespace(byte) {
+                    lastSignificantByte = byte
+                }
+                index = data.index(after: index)
+            }
+            return (data.endIndex, false)
+        }
+
+        // Scan disjoint outer objects once. A recovered object remains pending
+        // until the enclosing log quote closes or the line ends. This avoids
+        // rescanning every remaining brace suffix in quoted output.
         var start: Data.Index?
         var depth = 0
         var inString = false
         var escaped = false
-        for index in data.indices {
+        var pendingRecovered: JSONNode?
+        var index = data.startIndex
+        while index < data.endIndex {
             let byte = data[index]
             // Log quotes cannot span lines; JSON candidate state must.
             if depth == 0, byte == 0x0A || byte == 0x0D {
+                if let pendingRecovered { return pendingRecovered }
                 inString = false
                 escaped = false
+                index = data.index(after: index)
+                continue
+            }
+            if depth == 0, inString, !escaped, byte == 0x7B {
+                let recovered = recoverObjectStarting(at: index)
+                if recovered.validPrefix {
+                    if pendingRecovered == nil { pendingRecovered = recovered.node }
+                    index = recovered.end
+                    continue
+                }
+                let skipped = skipMalformedQuotedBrace(at: index)
+                if skipped.quoteClosed {
+                    inString = false
+                    escaped = false
+                    pendingRecovered = nil
+                }
+                index = skipped.end
                 continue
             }
             if inString {
                 if escaped { escaped = false }
                 else if byte == 0x5C { escaped = true }
-                else if byte == 0x22 { inString = false }
+                else if byte == 0x22 {
+                    inString = false
+                    pendingRecovered = nil
+                }
+                index = data.index(after: index)
                 continue
             }
-            if byte == 0x22 { inString = true; continue }
+            if byte == 0x22 { inString = true; index = data.index(after: index); continue }
             if byte == 0x7B {
                 if depth == 0 { start = index }
                 depth += 1
@@ -52,8 +248,9 @@ public struct CommandResult: Sendable {
                     start = nil
                 }
             }
+            index = data.index(after: index)
         }
-        return nil
+        return pendingRecovered
     }
 }
 

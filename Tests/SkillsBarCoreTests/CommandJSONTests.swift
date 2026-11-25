@@ -21,6 +21,14 @@ final class CommandJSONTests: XCTestCase {
     }
 
     func testUnfinishedLogQuotesDoNotHideLaterJSON() {
+        let warningPrefix = "warning \"unfinished "
+        let receipt = "{\"status\":42}"
+        XCTAssertEqual(parse(#"warning "unfinished {"partial":1, {"status":42}"#)?.int(at: ["status"]), 42)
+        XCTAssertEqual(parse(warningPrefix + receipt)?.int(at: ["status"]), 42)
+        XCTAssertEqual(parse(warningPrefix + receipt + " trailing")?.int(at: ["status"]), 42)
+        XCTAssertEqual(parse(#"warning "path {missing" {"status":"success"}"#)?.string(at: ["status"]), "success")
+        XCTAssertEqual(parse("warning \"unfinished {\"broken\":42\n{\"status\":\"success\"}")?.string(at: ["status"]), "success")
+
         for separator in ["\n", "\r\n", "\r"] {
             for suffix in ["", "\\"] {
                 let output = "warning \"unfinished" + suffix + separator + "{\"status\":\"success\"}"
@@ -28,5 +36,21 @@ final class CommandJSONTests: XCTestCase {
             }
         }
         XCTAssertNil(parse("log {\"text\":\"unfinished\n{\"status\":\"success\"}"))
+    }
+
+    func testUnfinishedLogQuoteDoesNotPromoteNestedMalformedObject() {
+        let output = "warning \"unfinished {broken: {\"status\":\"success\"}}"
+        XCTAssertNil(parse(output))
+        XCTAssertNil(parse(#"warning "unfinished {"items":[{"status":42}"#))
+    }
+
+    func testUnfinishedLogQuoteWithBraceHeavyOutputDoesNotRescanEveryBrace() {
+        let output = "warning \"unfinished " + String(repeating: "{", count: 10_000)
+        XCTAssertNil(parse(output))
+    }
+
+    func testQuotedBalancedObjectsAreScannedOnceBeforeTheLogQuoteCloses() {
+        let fragments = String(repeating: #"{"fragment":1} "#, count: 3_000)
+        XCTAssertNil(parse("warning \"unfinished " + fragments + "\""))
     }
 }
