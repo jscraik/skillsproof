@@ -122,6 +122,35 @@ final class PipelineEvidenceLoaderTests: XCTestCase {
         }
     }
 
+    func testCandidateIdentityAcceptsSuccessAfterUnfinishedLogQuote() throws {
+        try withRepo { root in
+            var build = makeChecks(digest: digest).packageBuild
+            build.stdout = "warning \"unfinished\n" + build.stdout
+            let identity = makeLoader(root: root, packageBuild: build).stageReceipts().first
+
+            XCTAssertEqual(identity?.evidenceStatus, .passed)
+            XCTAssertEqual(identity?.nextAction, "Canonical package digest established")
+        }
+    }
+
+    func testCandidateIdentityAcceptsMultilineSuccessAfterUnfinishedLogQuote() throws {
+        try withRepo { root in
+            var build = makeChecks(digest: digest).packageBuild
+            let object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: Data(build.stdout.utf8)) as? [String: Any]
+            )
+            let prettyJSON = try JSONSerialization.data(
+                withJSONObject: object,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            build.stdout = "warning \"unfinished " + String(decoding: prettyJSON, as: UTF8.self)
+            let identity = makeLoader(root: root, packageBuild: build).stageReceipts().first
+
+            XCTAssertEqual(identity?.evidenceStatus, .passed)
+            XCTAssertEqual(identity?.nextAction, "Canonical package digest established")
+        }
+    }
+
     func testCleanRiskTaxonomyCannotPassWithoutFullGovernedSecurityReceipt() throws {
         try withRepo { root in
             try FileManager.default.removeItem(at: securityReceiptURL(root))
