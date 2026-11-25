@@ -33,7 +33,14 @@ class ParserSecurityTests(unittest.TestCase):
 
     def test_longer_closing_fence_cannot_populate_required_field(self):
         """Reject empty fenced values even when the closing fence is longer."""
-        for fence in ('```\n````', '```python\n`````', '````\n````', '`````python\n``````'):
+        for fence in (
+            '```\n````',
+            '```python\n`````',
+            '```python \n```',
+            '```python\t\r\n```',
+            '````\n````',
+            '`````python\n``````',
+        ):
             with self.subTest(fence=fence):
                 self.assertEqual(normalize(fence), '')
                 body = VALID_BODY.replace(
@@ -42,6 +49,7 @@ class ParserSecurityTests(unittest.TestCase):
                 )
                 self.assertTrue(validate_body(body))
         self.assertEqual(normalize('```python\n substantive evidence \n````'), 'substantive evidence')
+        self.assertEqual(normalize('```python \n substantive evidence \n```'), 'substantive evidence')
         self.assertEqual(normalize('````python\n substantive evidence \n`````'), 'substantive evidence')
         self.assertEqual(normalize('````python\nunfinished\n```'), '````python unfinished ```')
 

@@ -23,11 +23,24 @@ final class CommandJSONTests: XCTestCase {
     func testUnfinishedLogQuotesDoNotHideLaterJSON() {
         let warningPrefix = "warning \"unfinished "
         let receipt = "{\"status\":42}"
-        XCTAssertEqual(parse(#"warning "unfinished {"partial":1, {"status":42}"#)?.int(at: ["status"]), 42)
+        XCTAssertNil(parse(#"warning "unfinished {"partial":1, {"status":42}"#))
         XCTAssertEqual(parse(warningPrefix + receipt)?.int(at: ["status"]), 42)
         XCTAssertEqual(parse(warningPrefix + receipt + " trailing")?.int(at: ["status"]), 42)
+        XCTAssertEqual(
+            parse("warning \"unfinished {\n  \"status\": \"success\"\n}")?.string(at: ["status"]),
+            "success"
+        )
         XCTAssertEqual(parse(#"warning "path {missing" {"status":"success"}"#)?.string(at: ["status"]), "success")
         XCTAssertEqual(parse("warning \"unfinished {\"broken\":42\n{\"status\":\"success\"}")?.string(at: ["status"]), "success")
+        XCTAssertEqual(
+            parse("warning \"unfinished {\"broken\":42\n{\"status\":\"success\"} trailing")?.string(at: ["status"]),
+            "success"
+        )
+        XCTAssertEqual(parse("warning \"unfinished {\"partial\":1\n" + receipt)?.int(at: ["status"]), 42)
+        XCTAssertEqual(
+            parse("warning \"unfinished {\n  \"payload\": {\n    \"status\": \"success\"\n  }\n}")?.string(at: ["payload", "status"]),
+            "success"
+        )
 
         for separator in ["\n", "\r\n", "\r"] {
             for suffix in ["", "\\"] {
@@ -42,6 +55,12 @@ final class CommandJSONTests: XCTestCase {
         let output = "warning \"unfinished {broken: {\"status\":\"success\"}}"
         XCTAssertNil(parse(output))
         XCTAssertNil(parse(#"warning "unfinished {"items":[{"status":42}"#))
+    }
+
+    func testPrettyPrintedObjectSkipsLongBlankLineRuns() {
+        let blankLines = String(repeating: "\n", count: 20_000)
+        let output = "warning \"unfinished {" + blankLines + "\"status\":42\n}"
+        XCTAssertEqual(parse(output)?.int(at: ["status"]), 42)
     }
 
     func testUnfinishedLogQuoteWithBraceHeavyOutputDoesNotRescanEveryBrace() {

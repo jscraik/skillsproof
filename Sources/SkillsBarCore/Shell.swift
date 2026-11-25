@@ -23,9 +23,9 @@ public struct CommandResult: Sendable {
             byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
         }
 
-        // Recovery candidates are scanned once. The first non-whitespace byte
-        // after an opening brace must be a JSON object key or the empty-object
-        // close; other braces are treated as diagnostic text.
+        // Recovery candidates are scanned once and returned only when the
+        // complete outer object is valid. Nested values cannot stand in for a
+        // malformed or incomplete parent.
         func recoverObjectStarting(at start: Data.Index) -> (end: Data.Index, node: JSONNode?, validPrefix: Bool) {
             var depth = 1
             var arrayDepth = 0
@@ -33,25 +33,25 @@ public struct CommandResult: Sendable {
             var candidateEscaped = false
             var awaitingFirstMember = true
             var lastSignificantByte: UInt8 = 0x7B
-            var nestedCandidateStart: Data.Index?
-            var lastCompleteNestedNode: JSONNode?
-            var lastCompleteNestedEnd: Data.Index?
             var index = data.index(after: start)
             while index < data.endIndex {
                 let byte = data[index]
-                // A quoted log ends at a line boundary. Let the outer scanner
-                // resume on the next line instead of swallowing its JSON.
                 if byte == 0x0A || byte == 0x0D {
-                    let nestedFallback: JSONNode? = lastCompleteNestedNode.flatMap { node -> JSONNode? in
-                        guard let nestedEnd = lastCompleteNestedEnd else { return nil }
-                        var suffix = nestedEnd
-                        while suffix < index {
-                            if !isWhitespace(data[suffix]) { return nil }
-                            suffix = data.index(after: suffix)
-                        }
-                        return node
+                    // A raw newline invalidates a JSON string. Elsewhere it is
+                    // whitespace, except when a new object cannot continue the
+                    // current top-level value and starts a separate receipt.
+                    if candidateInString { return (index, nil, true) }
+                    var next = index
+                    while next < data.endIndex, isWhitespace(data[next]) {
+                        next = data.index(after: next)
                     }
-                    return (index, nestedFallback, true)
+                    if depth == 1, arrayDepth == 0,
+                       next < data.endIndex, data[next] == 0x7B, lastSignificantByte != 0x3A {
+                        return (index, nil, true)
+                    }
+                    index = next
+                    if index >= data.endIndex { return (index, nil, true) }
+                    continue
                 }
                 if awaitingFirstMember {
                     if isWhitespace(byte) {
@@ -91,20 +91,13 @@ public struct CommandResult: Sendable {
                     arrayDepth = max(0, arrayDepth - 1)
                     lastSignificantByte = byte
                 } else if byte == 0x7B {
-                    if depth == 1, arrayDepth == 0 { nestedCandidateStart = index }
+                    if depth == 1, arrayDepth == 0, lastSignificantByte != 0x3A {
+                        return (data.index(after: start), nil, false)
+                    }
                     depth += 1
                     lastSignificantByte = byte
                 } else if byte == 0x7D, depth > 0 {
                     depth -= 1
-                    if depth == 1, let nestedStart = nestedCandidateStart {
-                        let nestedEnd = data.index(after: index)
-                        let nestedCandidate = data.subdata(in: nestedStart..<nestedEnd)
-                        if let object = try? JSONSerialization.jsonObject(with: nestedCandidate) {
-                            lastCompleteNestedNode = JSONNode(object)
-                            lastCompleteNestedEnd = nestedEnd
-                        }
-                        nestedCandidateStart = nil
-                    }
                     if depth == 0 {
                         let end = data.index(after: index)
                         let candidate = data.subdata(in: start..<end)
@@ -117,16 +110,7 @@ public struct CommandResult: Sendable {
                 }
                 index = data.index(after: index)
             }
-            let nestedFallback: JSONNode? = lastCompleteNestedNode.flatMap { node -> JSONNode? in
-                guard let nestedEnd = lastCompleteNestedEnd else { return nil }
-                var suffix = nestedEnd
-                while suffix < data.endIndex {
-                    if !isWhitespace(data[suffix]) { return nil }
-                    suffix = data.index(after: suffix)
-                }
-                return node
-            }
-            return (data.endIndex, nestedFallback, true)
+            return (data.endIndex, nil, true)
         }
 
         // A malformed brace inside a quoted diagnostic can contain nested

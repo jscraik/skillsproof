@@ -178,8 +178,10 @@ def normalize(value: str) -> str:
             start = 0
             while start < len(content) and (content[start].isalnum() or content[start] in "_-"):
                 start += 1
-            if content[start:].startswith(("\n", "\r\n")):
-                content = content[start:]
+            after_info = content[start:]
+            after_info_line = after_info.lstrip(" \t")
+            if after_info_line.startswith(("\n", "\r\n")):
+                content = after_info_line
             value = content.strip()
     inline = re.fullmatch(r"`([^`]+)`", value)
     if inline:
